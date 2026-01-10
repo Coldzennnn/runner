@@ -1,0 +1,1489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <!-- TITLE: Matches the in-game text exactly -->
+    <title>Dark Knight: Вечный путь</title>
+    
+    <!-- Yandex Games SDK -->
+    <script src="https://yandex.ru/games/sdk/v2"></script>
+    
+    <!-- 
+        LICENSE & COPYRIGHT INFO:
+        - Code: Procedurally generated / Custom implementation.
+        - Assets: All graphics are drawn via HTML5 Canvas API (no external images).
+        - Audio: Generated via Web Audio API (no external MP3/WAV).
+        - Fonts: Standard System Fonts used (Georgia/Impact stack).
+        - Compliance: Meets Yandex Games requirements.
+    -->
+
+    <style>
+        /* 1. GLOBAL RESET & MOBILE OPTIMIZATION */
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            outline: none;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #050505;
+            overflow: hidden; /* Prevent scroll bouncing */
+            /* FONT: Safe system serif stack for Fantasy vibe */
+            font-family: 'Georgia', 'Times New Roman', Times, serif;
+            user-select: none;
+            -webkit-touch-callout: none;
+            /* FIX: Disable browser gestures for instant touch response */
+            touch-action: none;
+        }
+
+        /* 2. BACKGROUND WRAPPER */
+        #bg-wrapper {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(to bottom, #1a0b2e, #000000);
+            filter: blur(20px);
+            z-index: 0;
+            opacity: 0.8;
+            transform: scale(1.1);
+        }
+
+        /* 3. GAME CONTAINER */
+        #game-container {
+            position: relative;
+            z-index: 1;
+            background-color: #000;
+            overflow: hidden;
+            box-shadow: 0 0 50px rgba(138, 43, 226, 0.2);
+            touch-action: none; /* Ensure no gestures inside game */
+            
+            /* DESKTOP: Portrait 9:16 */
+            height: 100vh;
+            aspect-ratio: 9 / 16;
+            margin: 0 auto;
+            border-left: 1px solid #333;
+            border-right: 1px solid #333;
+        }
+
+        /* MOBILE / TABLET OVERRIDE: Full width if screen is narrower than 9:16 */
+        @media screen and (max-aspect-ratio: 9/16) {
+            #game-container {
+                width: 100vw;
+                height: 100vh;
+                margin: 0;
+                border: none;
+            }
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            touch-action: none; /* Critical for canvas inputs */
+        }
+
+        /* 4. UI LAYER */
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .screen {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            pointer-events: auto;
+            transition: opacity 0.3s;
+            opacity: 0;
+            pointer-events: none;
+            background-image: radial-gradient(circle at center, transparent 0%, #000 90%);
+            z-index: 20;
+            /* FIX: Prevent overlap on very small screens via scroll */
+            overflow-y: auto; 
+            padding: 20px 0;
+        }
+
+        .screen.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        /* ROTATE DEVICE SCREEN (Hidden by default) */
+        #screen-rotate {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: #000;
+            z-index: 99999;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: #fff;
+            text-align: center;
+        }
+
+        #screen-rotate span {
+            font-size: 60px;
+            margin-bottom: 20px;
+            animation: rotate-icon 2s infinite ease-in-out;
+        }
+
+        @keyframes rotate-icon {
+            0% { transform: rotate(0deg); }
+            50% { transform: rotate(-90deg); }
+            100% { transform: rotate(0deg); }
+        }
+
+        /* Only show rotate screen on MOBILE LANDSCAPE */
+        @media screen and (orientation: landscape) and (max-height: 600px) {
+            #screen-rotate {
+                display: flex !important;
+            }
+        }
+
+        /* Typography - Gothic Style */
+        h1 {
+            color: #b30000;
+            font-family: 'Impact', 'Arial Black', 'Charcoal', sans-serif;
+            font-size: 58px; 
+            margin-bottom: 30px; /* More spacing for main title */
+            text-transform: uppercase;
+            letter-spacing: 5px;
+            text-shadow: 4px 4px 0px #000, 0 0 20px rgba(179, 0, 0, 0.6);
+            text-align: center;
+            line-height: 1.1;
+            max-width: 95%;
+            font-weight: 900;
+        }
+
+        /* Game Over Title - Smaller, cleaner */
+        .gameover-title {
+            font-size: 48px;
+            margin-bottom: 10px;
+            color: #d1d1d1;
+            text-shadow: 2px 2px 0 #000;
+        }
+
+        h2 {
+            color: #d1d1d1;
+            font-family: 'Georgia', 'Times New Roman', serif;
+            font-weight: bold;
+            letter-spacing: 2px;
+            font-size: 32px;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+            border-bottom: 1px solid #5a1a1a;
+            padding-bottom: 10px;
+        }
+
+        /* Score Display in Game Over - Compact */
+        .result-box {
+            background: rgba(20, 10, 10, 0.8);
+            border: 1px solid #5a1a1a;
+            padding: 20px 40px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+
+        .score-display {
+            font-family: 'Impact', 'Arial Black', sans-serif;
+            font-size: 60px; /* Reduced from 80 */
+            color: #b30000;
+            margin: 5px 0;
+            text-shadow: 2px 2px 0 #000;
+            letter-spacing: 2px;
+        }
+
+        .best-score-display {
+            color: #888;
+            font-size: 18px;
+            font-family: 'Georgia', 'Times New Roman', serif;
+            text-transform: uppercase;
+        }
+
+        /* Buttons */
+        .btn {
+            background: linear-gradient(180deg, #2b0a0a, #000000);
+            border: 2px solid #5a1a1a;
+            color: #d1d1d1;
+            padding: 12px 30px;
+            font-size: 20px; /* Slightly smaller for structure */
+            font-family: 'Georgia', 'Times New Roman', serif;
+            font-weight: 700;
+            letter-spacing: 1px;
+            cursor: pointer;
+            margin: 8px;
+            min-width: 200px;
+            min-height: 50px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.8);
+            transition: all 0.2s;
+            text-transform: uppercase;
+            position: relative;
+            overflow: hidden;
+            white-space: nowrap; 
+            border-radius: 4px;
+        }
+
+        .btn:hover {
+            border-color: #b30000;
+            color: #fff;
+            box-shadow: 0 0 15px rgba(179, 0, 0, 0.4);
+        }
+
+        .btn:active {
+            transform: scale(0.96);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(180deg, #1a1a2e, #000000);
+            border-color: #2c3e50;
+            color: #aec6cf;
+        }
+        
+        .btn-menu {
+            background: linear-gradient(180deg, #1a1a1a, #000000);
+            border-color: #444;
+            color: #aaa;
+        }
+
+        /* HUD */
+        #hud {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            padding: 20px; /* Fallback */
+            padding-top: max(20px, env(safe-area-inset-top));
+            padding-left: max(20px, env(safe-area-inset-left));
+            padding-right: max(20px, env(safe-area-inset-right));
+            
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .hud-scores-container {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .hud-score {
+            color: #d1d1d1;
+            font-size: 32px;
+            font-family: 'Impact', 'Arial Black', sans-serif;
+            text-shadow: 2px 2px 0 #000;
+            letter-spacing: 2px;
+        }
+
+        .hud-best {
+            color: #888;
+            font-size: 18px;
+            margin-top: 5px;
+            font-family: 'Georgia', 'Times New Roman', serif;
+        }
+
+        .btn-icon {
+            pointer-events: auto;
+            background: rgba(0,0,0,0.6);
+            border: 2px solid #5a1a1a;
+            color: #ccc;
+            width: 50px;
+            height: 50px;
+            border-radius: 10px; 
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            font-size: 24px;
+            transition: all 0.2s;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.8);
+        }
+
+        .btn-icon:hover {
+            border-color: #b30000;
+            color: white;
+        }
+
+        /* Settings Screen Layout */
+        #screen-settings .menu-container {
+            background: rgba(10, 5, 5, 0.95);
+            border: 2px solid #5a1a1a;
+            padding: 30px;
+            border-radius: 5px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            box-shadow: 0 0 30px rgba(0,0,0,1);
+            min-width: 280px;
+        }
+
+        .loading-overlay {
+            background: #000;
+            z-index: 999;
+        }
+
+        /* FIX: Adaptive Scaling for Small Landscape Screens */
+        @media screen and (max-height: 500px) {
+            h1 { font-size: 32px !important; margin-bottom: 10px !important; }
+            h2 { font-size: 20px !important; margin-bottom: 10px !important; }
+            .score-display { font-size: 40px !important; }
+            
+            .btn {
+                padding: 8px 20px !important;
+                font-size: 16px !important;
+                min-height: 40px !important;
+                margin: 4px !important;
+                min-width: 160px !important;
+            }
+            
+            #screen-settings .menu-container {
+                padding: 15px !important;
+                min-width: 240px !important;
+            }
+            
+            .result-box {
+                padding: 10px 20px !important;
+                margin-bottom: 10px !important;
+            }
+
+            .screen {
+                justify-content: flex-start; 
+                padding-top: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="bg-wrapper"></div>
+
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+
+        <div id="hud">
+            <div class="hud-scores-container">
+                <div class="hud-score"><span id="lbl-score">SOULS</span>: <span id="scoreVal">0</span></div>
+                <div class="hud-best"><span id="lbl-best">BEST</span>: <span id="bestVal">0</span></div>
+            </div>
+            <!-- Settings Toggle Button -->
+            <div class="btn-icon" id="btnSettings">⚙️</div>
+        </div>
+
+        <div id="ui-layer">
+            <!-- Loading -->
+            <div id="screen-loading" class="screen active loading-overlay">
+                <h1 id="txt-loading" style="font-size: 24px; color: #666;">SUMMONING...</h1>
+            </div>
+
+            <!-- Start Screen -->
+            <div id="screen-start" class="screen">
+                <h1 id="txt-title">DARK KNIGHT:<br>ETERNAL PATH</h1>
+                <!-- Removed Tutorial Text -->
+                <button class="btn" id="btnPlay">BEGIN JOURNEY</button>
+                <button class="btn btn-menu" id="btnMenuSettings">SETTINGS</button>
+            </div>
+
+            <!-- Settings / Pause Screen -->
+            <div id="screen-settings" class="screen">
+                <div class="menu-container">
+                    <h2 id="txt-settings-title">PAUSED</h2>
+                    <!-- Contextual Back/Resume Button -->
+                    <button class="btn" id="btnResume">RESUME</button>
+                    <!-- Language Toggle -->
+                    <button class="btn btn-secondary" id="btnLangToggle">LANG: EN</button>
+                    <button class="btn btn-secondary" id="btnSoundToggle">SOUND: ON</button>
+                    <button class="btn btn-secondary" id="btnExit">EXIT</button>
+                </div>
+            </div>
+
+            <!-- Game Over Screen -->
+            <div id="screen-gameover" class="screen">
+                <h1 id="txt-gameover" class="gameover-title">YOU DIED</h1>
+                
+                <div class="result-box">
+                    <div class="score-display"><span id="finalScore">0</span></div>
+                    <div class="best-score-display"><span id="lbl-best-over">BEST</span>: <span id="finalBest">0</span></div>
+                </div>
+                
+                <button class="btn" id="btnRestart">TRY AGAIN</button>
+                <button class="btn btn-secondary" id="btnRevive">
+                    🎬 <span id="txt-revive">RESURRECT</span>
+                </button>
+                <button class="btn btn-menu" id="btnHome">MENU</button>
+            </div>
+        </div>
+        
+        <!-- Rotate Device Overlay -->
+        <div id="screen-rotate">
+            <span>📱</span>
+            <p id="txt-rotate">PLEASE ROTATE DEVICE</p>
+        </div>
+    </div>
+
+<script>
+/**
+ * ==========================================
+ * 1. LOCALIZATION
+ * ==========================================
+ */
+const TRANSLATIONS = {
+    en: {
+        loading: "SUMMONING...",
+        title: "DARK KNIGHT:\nETERNAL PATH",
+        play: "BEGIN JOURNEY",
+        gameover: "YOU PERISHED",
+        paused: "PAUSED",
+        settings: "SETTINGS",
+        resume: "RESUME",
+        back: "BACK",
+        soundOn: "SOUND: ON",
+        soundOff: "SOUND: OFF",
+        langLabel: "LANG: EN",
+        exit: "EXIT TO MENU",
+        menu: "MAIN MENU",
+        settingsBtn: "SETTINGS",
+        restart: "TRY AGAIN",
+        revive: "AD: RESURRECT",
+        score: "SOULS",
+        best: "BEST",
+        rotate: "PLEASE ROTATE DEVICE"
+    },
+    ru: {
+        loading: "ПРИЗЫВ...",
+        title: "DARK KNIGHT:\nВЕЧНЫЙ ПУТЬ",
+        play: "НАЧАТЬ ПУТЬ",
+        gameover: "ВЫ ПОГИБЛИ",
+        paused: "ПАУЗА",
+        settings: "НАСТРОЙКИ",
+        resume: "ПРОДОЛЖИТЬ",
+        back: "НАЗАД",
+        soundOn: "ЗВУК: ВКЛ",
+        soundOff: "ЗВУК: ВЫКЛ",
+        langLabel: "ЯЗЫК: RU",
+        exit: "В МЕНЮ",
+        menu: "В ГЛАВНОЕ МЕНЮ",
+        settingsBtn: "НАСТРОЙКИ",
+        restart: "ЕЩЕ РАЗ",
+        revive: "РЕКЛАМА: ВОСКРЕСНУТЬ",
+        score: "ДУШИ",
+        best: "РЕКОРД",
+        rotate: "ПОВЕРНИТЕ УСТРОЙСТВО"
+    }
+};
+
+/**
+ * ==========================================
+ * 2. AUDIO SYSTEM
+ * ==========================================
+ */
+class SoundManager {
+    constructor() {
+        this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        this.masterGain = this.ctx.createGain();
+        this.masterGain.connect(this.ctx.destination);
+        
+        // Load mute state
+        this.muted = localStorage.getItem('grim-path-muted') === 'true';
+        this.updateGain();
+    }
+
+    setMute(isMuted) {
+        this.muted = isMuted;
+        localStorage.setItem('grim-path-muted', isMuted);
+        this.updateGain();
+        
+        if (this.ctx.state === 'suspended' && !this.muted) {
+            this.ctx.resume();
+        }
+        return this.muted;
+    }
+
+    updateGain() {
+        this.masterGain.gain.setValueAtTime(this.muted ? 0 : 1, this.ctx.currentTime);
+    }
+
+    playJump() {
+        if (this.muted) return;
+        this._playTone(100, 'triangle', 0.15, -12, true);
+    }
+
+    playCrash() {
+        if (this.muted) return;
+        this._playTone(40, 'sawtooth', 0.4, -5); 
+        this._playTone(30, 'square', 0.6, -5);
+    }
+
+    _playTone(freq, type, duration, volDecibels, slide = false) {
+        if (this.ctx.state === 'suspended') this.ctx.resume();
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+        if (slide) {
+            osc.frequency.exponentialRampToValueAtTime(freq * 3, this.ctx.currentTime + duration);
+        }
+        
+        const vol = Math.pow(10, volDecibels / 20);
+        gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
+
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+        
+        osc.start();
+        osc.stop(this.ctx.currentTime + duration);
+    }
+}
+
+/**
+ * ==========================================
+ * 3. YANDEX SDK & TRANSLATION MANAGER
+ * ==========================================
+ */
+class YandexManager {
+    constructor(gameInstance) {
+        this.ysdk = null;
+        this.game = gameInstance;
+        this.isMock = false;
+        
+        this.lang = localStorage.getItem('grim-path-lang') || 'en';
+        // We defer applying translations until init to ensure DOM is ready, 
+        // but we can try immediately if elements exist.
+    }
+
+    setLanguage(lang) {
+        this.lang = lang;
+        localStorage.setItem('grim-path-lang', lang);
+        this.applyTranslations();
+    }
+
+    toggleLanguage() {
+        const newLang = this.lang === 'en' ? 'ru' : 'en';
+        this.setLanguage(newLang);
+    }
+
+    async init() {
+        const timeoutPromise = new Promise((resolve, reject) => {
+            setTimeout(() => reject(new Error("SDK Timeout")), 1500);
+        });
+
+        const sdkPromise = new Promise(async (resolve, reject) => {
+             if (window.YaGames) {
+                 try {
+                    const ysdk = await window.YaGames.init();
+                    resolve(ysdk);
+                 } catch (e) {
+                     reject(e);
+                 }
+             } else {
+                 reject(new Error("No SDK Script"));
+             }
+        });
+
+        try {
+            this.ysdk = await Promise.race([sdkPromise, timeoutPromise]);
+            
+            if (!localStorage.getItem('grim-path-lang')) {
+                const env = this.ysdk.environment;
+                const code = env.i18n.lang;
+                if (['ru', 'be', 'kk', 'uk', 'uz'].includes(code)) this.lang = 'ru';
+                else this.lang = 'en';
+            }
+
+            this.ysdk.features.LoadingAPI.ready();
+            
+        } catch (e) {
+            console.warn("Falling back to Offline/Mock Mode:", e);
+            this.isMock = true;
+            if (!localStorage.getItem('grim-path-lang')) {
+                 if ((navigator.language || "").startsWith('ru')) this.lang = 'ru';
+            }
+        }
+        
+        this.applyTranslations();
+    }
+
+    // GAMEPLAY API: Explicit Start/Stop signals
+    gameplayStart() {
+        if (this.ysdk && this.ysdk.features.GameplayAPI) {
+            this.ysdk.features.GameplayAPI.start();
+        }
+    }
+
+    gameplayStop() {
+        if (this.ysdk && this.ysdk.features.GameplayAPI) {
+            this.ysdk.features.GameplayAPI.stop();
+        }
+    }
+
+    applyTranslations() {
+        const t = TRANSLATIONS[this.lang];
+        if (!t) return; 
+        
+        const loadEl = document.getElementById('txt-loading');
+        if (loadEl) loadEl.innerText = t.loading;
+
+        document.getElementById('txt-title').innerText = t.title;
+        document.getElementById('btnPlay').innerText = t.play;
+        document.getElementById('btnMenuSettings').innerText = t.settingsBtn;
+        
+        document.getElementById('txt-gameover').innerText = t.gameover;
+        document.getElementById('btnRestart').innerText = t.restart;
+        document.getElementById('txt-revive').innerText = t.revive;
+        document.getElementById('btnHome').innerText = t.menu;
+        
+        document.getElementById('lbl-score').innerText = t.score;
+        document.getElementById('lbl-best').innerText = t.best;
+        document.getElementById('lbl-best-over').innerText = t.best;
+        
+        // Settings labels are context dependent, updated in Game class
+        // But defaults:
+        document.getElementById('btnExit').innerText = t.exit;
+        document.getElementById('btnLangToggle').innerText = t.langLabel;
+        document.getElementById('txt-rotate').innerText = t.rotate;
+        
+        this.updateSoundBtnText();
+    }
+
+    updateSoundBtnText() {
+        const t = TRANSLATIONS[this.lang];
+        const btn = document.getElementById('btnSoundToggle');
+        // use SoundManager state here
+        btn.innerText = this.game.sound.muted ? t.soundOff : t.soundOn;
+    }
+
+    showInterstitial(cb) {
+        // FIX: Explicitly stop gameplay for analytics
+        this.gameplayStop();
+
+        if (this.isMock) {
+            if (cb) cb();
+            return;
+        }
+        
+        this.ysdk.adv.showFullscreenAdv({ 
+            callbacks: { 
+                onClose: (wasShown) => {
+                    if (cb) cb();
+                }, 
+                onError: (error) => {
+                    console.error("Ad Error:", error);
+                    if (cb) cb();
+                } 
+            } 
+        });
+    }
+
+    showRewarded(cb) {
+        // FIX: Explicitly stop gameplay for analytics
+        this.gameplayStop();
+
+        if (this.isMock) {
+            if (cb) cb();
+            return;
+        }
+
+        let hasReward = false;
+
+        this.ysdk.adv.showRewardedVideo({
+            callbacks: {
+                onOpen: () => {
+                    // Mute temporally without saving to storage
+                    if (this.game.sound.ctx.state === 'running') {
+                        this.game.sound.masterGain.gain.setValueAtTime(0, this.game.sound.ctx.currentTime);
+                    }
+                },
+                onRewarded: () => {
+                    hasReward = true;
+                },
+                onClose: () => {
+                    // Restore sound
+                    this.game.sound.updateGain();
+                    
+                    // Logic: Callback typically restarts/continues game -> triggers gameplayStart
+                    if (hasReward && cb) {
+                        cb();
+                    }
+                },
+                onError: (e) => {
+                    console.error("Rewarded Error:", e);
+                    this.game.sound.updateGain();
+                }
+            }
+        });
+    }
+}
+
+/**
+ * ==========================================
+ * 4. PARALLAX
+ * ==========================================
+ */
+class ParallaxLayer {
+    constructor(gameWidth, gameHeight, speedModifier, type) {
+        this.width = gameWidth;
+        this.height = gameHeight;
+        this.speedModifier = speedModifier;
+        this.x = 0;
+        this.canvas = document.createElement('canvas');
+        this.canvas.width = gameWidth;
+        this.canvas.height = gameHeight;
+        this.ctx = this.canvas.getContext('2d');
+        this.generateAsset(type);
+    }
+
+    generateAsset(type) {
+        const ctx = this.ctx;
+        const w = this.width;
+        const h = this.height;
+        ctx.clearRect(0, 0, w, h);
+
+        if (type === 'mountains') {
+            ctx.fillStyle = '#12051c'; 
+            ctx.beginPath();
+            ctx.moveTo(0, h);
+            for (let i = 0; i <= w; i += 20) {
+                const y = h - 150 - Math.random() * 100 - (Math.sin(i/100)*50);
+                ctx.lineTo(i, y);
+            }
+            ctx.lineTo(w, h);
+            ctx.fill();
+        } 
+        else if (type === 'forest') {
+            ctx.fillStyle = '#1e0b2e';
+            const groundLevel = h - 80;
+            ctx.fillRect(0, groundLevel, w, h - groundLevel);
+            for (let i = 0; i < w; i += 60 + Math.random() * 60) {
+                const treeH = 100 + Math.random() * 80;
+                const treeW = 10 + Math.random() * 10;
+                ctx.fillRect(i, groundLevel - treeH, treeW, treeH);
+                ctx.lineWidth = 4;
+                ctx.strokeStyle = '#1e0b2e';
+                ctx.beginPath();
+                ctx.moveTo(i + treeW/2, groundLevel - treeH + 30);
+                ctx.lineTo(i - 20, groundLevel - treeH);
+                ctx.stroke();
+            }
+        }
+    }
+
+    update(gameSpeed, dt) {
+        this.x -= gameSpeed * this.speedModifier * dt;
+        if (this.x <= -this.width) this.x = 0;
+    }
+
+    draw(mainCtx) {
+        mainCtx.drawImage(this.canvas, this.x, 0);
+        mainCtx.drawImage(this.canvas, this.x + this.width, 0);
+    }
+}
+
+/**
+ * ==========================================
+ * 5. GAME ENGINE & STATE MACHINE (with DeltaTime)
+ * ==========================================
+ */
+class Game {
+    constructor() {
+        this.canvas = document.getElementById('gameCanvas');
+        this.ctx = this.canvas.getContext('2d');
+        
+        // STATES: LOADING, MENU, PLAYING, PAUSED, GAMEOVER
+        this.state = 'LOADING'; 
+        this.menuContext = false; // Is settings opened from menu?
+        
+        this.width = 0;
+        this.height = 0;
+        this.shakeIntensity = 0;
+        
+        // Systems
+        this.sound = new SoundManager();
+        this.yandex = new YandexManager(this);
+        
+        // Performance
+        this.lastTime = 0;
+        this.isTabActive = true;
+
+        // Scores
+        this.score = 0;
+        this.bestScore = parseInt(localStorage.getItem('grim-path-best')) || 0;
+        document.getElementById('bestVal').innerText = this.bestScore;
+        
+        // Entities - Standard Speed
+        this.player = {
+            x: 100, y: 0, width: 40, height: 60, 
+            dy: 0, jumpForce: 15, grounded: false, 
+            runFrame: 0, capeFrame: 0
+        };
+        
+        this.obstacles = [];
+        this.particles = [];
+        this.parallaxLayers = [];
+        this.score = 0;
+        this.speed = 5.5; 
+        this.gravity = 0.65; 
+        this.spawnTimer = 0; 
+
+        // Bindings
+        this.loop = this.loop.bind(this);
+        this.resize = this.resize.bind(this);
+        this.handleInput = this.handleInput.bind(this);
+
+        // Events
+        window.addEventListener('resize', this.resize);
+        this.resize();
+
+        // Control Inputs
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' || e.code === 'ArrowUp') {
+                e.preventDefault(); 
+                this.handleInput();
+            }
+            if (e.code === 'Escape') this.togglePause();
+        });
+        
+        // Instant tap logic
+        const inputHandler = (e) => {
+            // Ignore UI buttons
+            if (e.target.closest('.btn') || e.target.closest('.btn-icon')) return;
+            
+            // Prevent default zooming/scrolling
+            if (e.cancelable && e.type === 'touchstart') e.preventDefault();
+            
+            this.handleInput();
+        };
+
+        // Use pointerdown for fastest response on both Mobile & PC
+        document.addEventListener('pointerdown', inputHandler, { passive: false });
+
+        // UI Setup
+        this.setupUI();
+
+        // Init
+        this.init();
+    }
+
+    setupUI() {
+        // Main Menu (Start)
+        document.getElementById('btnPlay').onclick = () => {
+            this.enterFullscreen(); 
+            this.yandex.showInterstitial(() => {
+                this.setState('PLAYING');
+            });
+        };
+
+        // Main Menu Settings
+        document.getElementById('btnMenuSettings').onclick = () => {
+            this.menuContext = true; // Opened from menu
+            this.setState('PAUSED'); // Re-use paused screen
+        };
+
+        // Game Over Buttons
+        document.getElementById('btnRestart').onclick = () => {
+            this.yandex.showInterstitial(() => this.restartGame());
+        };
+        document.getElementById('btnRevive').onclick = () => {
+            this.yandex.showRewarded(() => this.reviveGame());
+        };
+        document.getElementById('btnHome').onclick = () => {
+            this.quitToMenu();
+        };
+
+        // HUD Settings
+        const btnSettings = document.getElementById('btnSettings');
+        btnSettings.addEventListener('click', (e) => {
+            e.stopPropagation(); 
+            this.menuContext = false; // Opened from game
+            this.togglePause();
+        });
+        btnSettings.addEventListener('touchstart', (e) => {
+             e.stopPropagation(); 
+             e.preventDefault();
+             this.menuContext = false;
+             this.togglePause();
+        });
+
+        // Settings Screen Buttons
+        document.getElementById('btnResume').onclick = () => {
+            // Contextual behavior
+            if (this.menuContext) {
+                // Back to menu
+                this.setState('MENU');
+            } else {
+                // Resume game
+                this.togglePause();
+            }
+        };
+        
+        document.getElementById('btnLangToggle').onclick = () => {
+            this.yandex.toggleLanguage();
+            // Re-update labels immediately to reflect change in Settings UI
+            this.updateSettingsLabels(); 
+        };
+
+        document.getElementById('btnSoundToggle').onclick = () => {
+            const newState = !this.sound.muted;
+            this.sound.setMute(newState);
+            this.yandex.updateSoundBtnText();
+        };
+
+        document.getElementById('btnExit').onclick = () => this.quitToMenu();
+
+        // Page Visibility
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                this.sound.ctx.suspend();
+                if (this.state === 'PLAYING') {
+                    this.menuContext = false;
+                    this.setState('PAUSED'); 
+                }
+                this.isTabActive = false; 
+            } else {
+                this.sound.ctx.resume();
+                this.isTabActive = true;
+                this.lastTime = performance.now(); 
+                requestAnimationFrame(this.loop);
+            }
+        });
+    }
+
+    updateSettingsLabels() {
+        const t = TRANSLATIONS[this.yandex.lang];
+        const title = document.getElementById('txt-settings-title');
+        const resumeBtn = document.getElementById('btnResume');
+        const exitBtn = document.getElementById('btnExit');
+
+        if (this.menuContext) {
+            title.innerText = t.settings;
+            resumeBtn.innerText = t.back;
+            exitBtn.style.display = 'none'; // No "Exit to Menu" if already in menu
+        } else {
+            title.innerText = t.paused;
+            resumeBtn.innerText = t.resume;
+            exitBtn.style.display = 'inline-block';
+            exitBtn.innerText = t.exit;
+        }
+    }
+
+    enterFullscreen() {
+        const elem = document.documentElement;
+        if (elem.requestFullscreen) {
+            elem.requestFullscreen().catch(err => console.log(err));
+        } else if (elem.webkitRequestFullscreen) { /* Safari */
+            elem.webkitRequestFullscreen();
+        } else if (elem.msRequestFullscreen) { /* IE11 */
+            elem.msRequestFullscreen();
+        }
+    }
+
+    async init() {
+        requestAnimationFrame(this.loop);
+        await this.yandex.init();
+        this.initParallax();
+        this.setState('MENU');
+        document.getElementById('screen-loading').classList.remove('active');
+    }
+
+    setState(newState) {
+        const prevState = this.state;
+        this.state = newState;
+        document.querySelectorAll('.screen').forEach(el => el.classList.remove('active'));
+
+        // Handle GameplayAPI logic
+        if (newState === 'PLAYING') {
+            this.yandex.gameplayStart();
+        } else if (prevState === 'PLAYING' && newState !== 'PLAYING') {
+            this.yandex.gameplayStop();
+        }
+
+        if (newState === 'MENU') {
+            document.getElementById('screen-start').classList.add('active');
+            document.getElementById('btnSettings').style.display = 'none'; 
+            this.score = 0;
+            this.resetEntities();
+        } 
+        else if (newState === 'PLAYING') {
+            document.getElementById('btnSettings').style.display = 'flex';
+            if (this.score === 0) this.resetEntities();
+            this.lastTime = performance.now(); 
+        }
+        else if (newState === 'PAUSED') {
+            document.getElementById('screen-settings').classList.add('active');
+            this.updateSettingsLabels();
+        }
+        else if (newState === 'GAMEOVER') {
+             document.getElementById('screen-gameover').classList.add('active');
+             document.getElementById('btnSettings').style.display = 'none';
+             this.checkBestScore();
+        }
+    }
+
+    checkBestScore() {
+        if (this.score > this.bestScore) {
+            this.bestScore = Math.floor(this.score);
+            localStorage.setItem('grim-path-best', this.bestScore);
+            document.getElementById('bestVal').innerText = this.bestScore;
+        }
+        document.getElementById('finalBest').innerText = this.bestScore;
+    }
+
+    togglePause() {
+        if (this.state === 'PLAYING') {
+            this.setState('PAUSED');
+        } else if (this.state === 'PAUSED') {
+            this.setState('PLAYING');
+        }
+    }
+
+    quitToMenu() {
+        this.yandex.showInterstitial(() => {
+            this.setState('MENU');
+        });
+    }
+
+    restartGame() {
+        this.score = 0;
+        this.speed = 5.5;
+        this.resetEntities();
+        this.setState('PLAYING');
+    }
+
+    reviveGame() {
+        this.player.y = this.groundY - this.player.height;
+        this.player.dy = 0;
+        this.obstacles = [];
+        this.spawnTimer = 0;
+        this.shakeIntensity = 0;
+        document.getElementById('btnRevive').style.display = 'none'; 
+        this.setState('PLAYING');
+    }
+
+    resetEntities() {
+        this.obstacles = [];
+        this.particles = [];
+        this.player.y = this.groundY - this.player.height;
+        this.player.dy = 0;
+        this.score = 0;
+        this.speed = 5.5;
+        this.gravity = 0.65;
+        this.player.x = 100; 
+        this.spawnTimer = 0;
+        document.getElementById('btnRevive').style.display = 'inline-block';
+    }
+
+    initParallax() {
+        this.parallaxLayers = [
+            new ParallaxLayer(this.width, this.height, 0.2, 'mountains'),
+            new ParallaxLayer(this.width, this.height, 0.6, 'forest')
+        ];
+    }
+
+    resize() {
+        const container = document.getElementById('game-container');
+        this.canvas.width = container.clientWidth;
+        this.canvas.height = container.clientHeight;
+        this.width = this.canvas.width;
+        this.height = this.canvas.height;
+        this.groundY = this.height - 80;
+        
+        this.initParallax();
+
+        if (this.state === 'MENU' || this.state === 'LOADING') {
+             this.player.y = this.groundY - this.player.height;
+        }
+    }
+
+    handleInput() {
+        if (this.state !== 'PLAYING') return;
+
+        // FIX: Jump only if grounded. Physics fix ensures this is stable now.
+        if (this.player.grounded) {
+            this.player.dy = -this.player.jumpForce;
+            this.player.grounded = false;
+            this.sound.playJump();
+            this.createParticles(this.player.x + 20, this.player.y + this.player.height, 10, '#555', 'dust');
+        }
+    }
+
+    createParticles(x, y, count, color, type = 'spark') {
+        for (let i = 0; i < count; i++) {
+            this.particles.push({
+                x: x, y: y,
+                vx: (Math.random() - 0.5) * (type === 'death' ? 10 : 3),
+                vy: (Math.random() - 1) * (type === 'death' ? 10 : 3),
+                life: 1.0,
+                color: color,
+                type: type,
+                size: Math.random() * (type === 'death' ? 6 : 3)
+            });
+        }
+    }
+
+    update(dt) {
+        if (this.state === 'PAUSED') return;
+
+        if (this.state === 'PLAYING' || this.state === 'MENU') {
+            const currentSpeed = (this.state === 'MENU') ? 2 : this.speed;
+            this.parallaxLayers.forEach(layer => layer.update(currentSpeed, dt));
+        }
+
+        if (this.state !== 'PLAYING') return;
+
+        // Player Physics
+        this.player.dy += this.gravity * dt;
+        this.player.y += this.player.dy * dt;
+
+        // Ground Collision
+        // FIX: Added tolerance (this.groundY - 2) to fix "flickering grounded state"
+        // on high refresh rate monitors (120Hz/144Hz/250Hz).
+        // This ensures the jump button works 100% of the time.
+        if (this.player.y + this.player.height > this.groundY - 2) {
+            this.player.y = this.groundY - this.player.height;
+            this.player.dy = 0;
+            this.player.grounded = true;
+            if (Math.random() < 0.2 * dt) {
+                 this.createParticles(this.player.x + 10, this.player.y + this.player.height, 1, '#443333', 'dust');
+            }
+        } else {
+            this.player.grounded = false;
+        }
+
+        // Animation
+        this.player.capeFrame += (0.1 + (this.speed * 0.01)) * dt;
+        if (this.player.grounded) {
+            this.player.runFrame += (0.2 + (this.speed * 0.01)) * dt;
+        } else {
+            this.player.runFrame = 0;
+        }
+
+        // REBALANCE: Acceleration increased slightly (was 0.00025)
+        const maxSpeed = 9.5;
+        this.speed = Math.min(this.speed + 0.0004 * dt, maxSpeed);
+        
+        this.score += 0.1 * dt;
+        document.getElementById('scoreVal').innerText = Math.floor(this.score);
+
+        if (this.shakeIntensity > 0) this.shakeIntensity *= Math.pow(0.9, dt);
+        if (this.shakeIntensity < 0.5) this.shakeIntensity = 0;
+
+        // Obstacles Logic (fair timing)
+        this.spawnTimer += dt;
+        const difficulty = Math.min(this.score / 250, 1); // 0..1
+
+        // Frames between spawns (approx 60fps basis)
+        // 78 frames ~ 1.3s, 50 frames ~ 0.8s
+        const gapFramesBase = 78 - 28 * difficulty;
+        const gapFrames = gapFramesBase + (Math.random() * 20 - 5); // Added variance
+
+        // Min reaction time in frames
+        const minReactFrames = 35; // ~0.6s
+
+        // Air time for jump (approx calculation based on physics)
+        // jumpForce 15, gravity 0.65 -> t_up = 15/0.65 ~ 23 frames. Total air ~ 46 frames.
+        const airFrames = (2 * this.player.jumpForce) / this.gravity;
+        const minMustJumpGap = airFrames + 10; // buffer
+
+        let canSpawn = false;
+
+        if (this.obstacles.length === 0) {
+            canSpawn = this.spawnTimer >= gapFrames;
+        } else {
+            const last = this.obstacles[this.obstacles.length - 1];
+            // Check what kind of gap we need based on previous obstacle
+            const neededFrames = (last.mustJump) ? minMustJumpGap : minReactFrames;
+
+            // Convert time to distance
+            const minDistance = this.speed * neededFrames;
+
+            // Only spawn if physically far enough AND timer allows
+            if ((this.width - last.x) >= minDistance && this.spawnTimer >= gapFrames) {
+                canSpawn = true;
+            }
+        }
+
+        if (canSpawn) this.trySpawnObstacle();
+
+        // Update Obstacles
+        for (let i = this.obstacles.length - 1; i >= 0; i--) {
+            let obs = this.obstacles[i];
+            obs.x -= this.speed * dt;
+            obs.pulse += 0.1 * dt;
+
+            let hitX = obs.x + 10;
+            let hitW = obs.width - 20;
+            let hitY = obs.y + 10;
+            let hitH = obs.height - 15;
+
+            if (this.player.x < hitX + hitW &&
+                this.player.x + this.player.width > hitX &&
+                this.player.y < hitY + hitH &&
+                this.player.y + this.player.height > hitY) {
+                
+                this.createParticles(this.player.x + 20, this.player.y + 30, 50, '#000', 'death');
+                this.shakeIntensity = 20;
+                this.setState('GAMEOVER');
+                document.getElementById('finalScore').innerText = Math.floor(this.score);
+                this.sound.playCrash();
+            }
+
+            if (obs.x + obs.width < 0) this.obstacles.splice(i, 1);
+        }
+
+        // Particles
+        for (let i = this.particles.length - 1; i >= 0; i--) {
+            let p = this.particles[i];
+            p.x += p.vx * dt;
+            p.y += p.vy * dt;
+            p.life -= 0.02 * dt;
+            if (p.life <= 0) this.particles.splice(i, 1);
+        }
+    }
+
+    trySpawnObstacle() {
+        this.spawnTimer = 0;
+
+        const r = Math.random();
+        let type = 'tombstone';
+        let mustJump = true;
+        let size = 50; // default for tombstone
+        let obsY = this.groundY - size + 5;
+
+        // Variety after some score
+        if (this.score > 50) {
+            if (r < 0.35) type = 'ghostHigh';
+            else if (r < 0.65) type = 'ghostLow';
+        }
+
+        if (type === 'tombstone') {
+            size = 50;
+            obsY = this.groundY - size + 5;
+            mustJump = true;
+        } else if (type === 'ghostLow') {
+            size = 40;
+            // Low enough to force jump, high enough to look floating
+            obsY = this.groundY - 60 - Math.random() * 20;
+            mustJump = true;
+        } else if (type === 'ghostHigh') {
+            size = 40;
+            // High enough to run under
+            obsY = this.groundY - 130 - Math.random() * 40;
+            mustJump = false;
+        }
+
+        this.obstacles.push({
+            x: this.width,
+            y: obsY,
+            width: size,
+            height: size,
+            type: type.includes('ghost') ? 'ghost' : 'tombstone', // render type
+            subtype: type, // logic type
+            pulse: 0,
+            mustJump: mustJump
+        });
+    }
+
+    draw() {
+        this.ctx.save();
+        
+        if (this.shakeIntensity > 0) {
+            let dx = (Math.random() - 0.5) * this.shakeIntensity;
+            let dy = (Math.random() - 0.5) * this.shakeIntensity;
+            this.ctx.translate(dx, dy);
+        }
+
+        const grad = this.ctx.createLinearGradient(0, 0, 0, this.height);
+        grad.addColorStop(0, '#050010');
+        grad.addColorStop(1, '#240b36');
+        this.ctx.fillStyle = grad;
+        this.ctx.fillRect(0, 0, this.width, this.height);
+
+        this.ctx.shadowBlur = 40;
+        this.ctx.shadowColor = '#fff';
+        this.ctx.fillStyle = '#ccc';
+        this.ctx.beginPath();
+        this.ctx.arc(this.width - 80, 80, 40, 0, Math.PI * 2);
+        this.ctx.fill();
+        this.ctx.shadowBlur = 0;
+
+        this.parallaxLayers.forEach(layer => layer.draw(this.ctx));
+
+        this.ctx.fillStyle = '#0a0a0a';
+        this.ctx.fillRect(0, this.groundY, this.width, this.height - this.groundY);
+        this.ctx.fillStyle = '#1a1a1a';
+        this.ctx.fillRect(0, this.groundY, this.width, 10);
+
+        if (this.state !== 'GAMEOVER' || this.shakeIntensity > 1) {
+             this.drawKnight(this.player.x, this.player.y, this.player.width, this.player.height);
+        }
+
+        this.obstacles.forEach(obs => this.drawObstacle(obs));
+
+        this.particles.forEach(p => {
+            this.ctx.globalAlpha = p.life;
+            this.ctx.fillStyle = p.color;
+            this.ctx.beginPath();
+            if (p.type === 'death') {
+                this.ctx.rect(p.x, p.y, p.size, p.size);
+            } else {
+                this.ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+            }
+            this.ctx.fill();
+        });
+        this.ctx.globalAlpha = 1;
+        this.ctx.shadowBlur = 0;
+
+        const gradient = this.ctx.createRadialGradient(
+            this.width/2, this.height/2, this.height/3, 
+            this.width/2, this.height/2, this.height
+        );
+        gradient.addColorStop(0, 'transparent');
+        gradient.addColorStop(1, 'rgba(0,0,0,0.7)');
+        this.ctx.fillStyle = gradient;
+        this.ctx.fillRect(0,0,this.width, this.height);
+
+        this.ctx.restore();
+    }
+
+    drawKnight(x, y, w, h) {
+        this.ctx.save();
+        this.ctx.translate(x, y);
+
+        this.ctx.fillStyle = '#2a0a0a';
+        this.ctx.beginPath();
+        this.ctx.moveTo(10, 10);
+        for(let i=0; i<30; i++) {
+            this.ctx.lineTo(10 - i*1.5, 10 + i + Math.sin(this.player.capeFrame + i*0.2)*5);
+        }
+        this.ctx.lineTo(10, h - 10);
+        this.ctx.fill();
+
+        this.ctx.fillStyle = '#111';
+        if (this.player.grounded && (this.state === 'PLAYING' || this.state === 'MENU')) {
+            let legOffset = Math.sin(this.player.runFrame) * 10;
+            this.ctx.fillRect(10, h-20, 8, 20 - legOffset);
+            this.ctx.fillRect(22, h-20, 8, 20 + legOffset);
+        } else {
+            this.ctx.fillRect(10, h-25, 8, 15);
+            this.ctx.fillRect(22, h-20, 8, 20);
+        }
+
+        this.ctx.fillStyle = '#222';
+        this.ctx.fillRect(10, 15, 20, 35);
+        
+        this.ctx.fillStyle = '#1a1a1a';
+        this.ctx.fillRect(8, 0, 24, 20);
+        
+        this.ctx.shadowBlur = 5;
+        this.ctx.shadowColor = '#00ffcc';
+        this.ctx.fillStyle = '#00ffcc';
+        this.ctx.fillRect(22, 6, 8, 2);
+        this.ctx.shadowBlur = 0;
+
+        this.ctx.fillStyle = '#333';
+        this.ctx.fillRect(15, 20, 8, 20);
+
+        this.ctx.restore();
+    }
+
+    drawObstacle(obs) {
+        this.ctx.save();
+        this.ctx.translate(obs.x, obs.y);
+
+        if (obs.type === 'ghost') {
+            this.ctx.shadowBlur = 10;
+            this.ctx.shadowColor = '#8a2be2';
+            this.ctx.fillStyle = `rgba(200, 200, 255, ${0.7 + Math.sin(obs.pulse)*0.2})`;
+            
+            this.ctx.beginPath();
+            this.ctx.arc(20, 20, 15, Math.PI, 0);
+            this.ctx.lineTo(35, 40);
+            this.ctx.lineTo(27, 35);
+            this.ctx.lineTo(20, 40);
+            this.ctx.lineTo(13, 35);
+            this.ctx.lineTo(5, 40);
+            this.ctx.lineTo(5, 20);
+            this.ctx.fill();
+
+            this.ctx.fillStyle = '#000';
+            this.ctx.beginPath();
+            this.ctx.arc(15, 18, 3, 0, Math.PI*2);
+            this.ctx.arc(25, 18, 3, 0, Math.PI*2);
+            this.ctx.fill();
+
+        } else {
+            this.ctx.fillStyle = '#444';
+            this.ctx.beginPath();
+            this.ctx.moveTo(5, obs.height);
+            this.ctx.lineTo(5, 15);
+            this.ctx.arc(obs.width/2, 15, obs.width/2 - 5, Math.PI, 0);
+            this.ctx.lineTo(obs.width-5, obs.height);
+            this.ctx.fill();
+
+            this.ctx.strokeStyle = '#222';
+            this.ctx.lineWidth = 2;
+            this.ctx.beginPath();
+            this.ctx.moveTo(15, 15);
+            this.ctx.lineTo(25, 25);
+            this.ctx.lineTo(20, 35);
+            this.ctx.stroke();
+
+            this.ctx.shadowBlur = 10;
+            this.ctx.shadowColor = '#b30000';
+            this.ctx.fillStyle = '#b30000';
+            this.ctx.fillRect(5, obs.height-5, obs.width-10, 5);
+        }
+
+        this.ctx.restore();
+    }
+
+    loop(timestamp) {
+        if (!this.isTabActive) return;
+        
+        requestAnimationFrame(this.loop);
+
+        if (!this.lastTime) this.lastTime = timestamp;
+        const deltaTime = timestamp - this.lastTime;
+        this.lastTime = timestamp;
+
+        const dt = Math.min(deltaTime / 16.666, 3.0);
+
+        this.update(dt);
+        this.draw();
+    }
+}
+
+window.onload = () => {
+    const game = new Game();
+};
+</script>
+</body>
+</html>

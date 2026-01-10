@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <!-- TITLE: Matches the in-game text exactly -->
-    <title>Dark Knight: Вечный путь</title>
+    <title>Темный Рыцарь: Вечный Путь</title>
     
     <!-- Yandex Games SDK -->
     <script src="https://yandex.ru/games/sdk/v2"></script>
@@ -37,7 +36,6 @@
             font-family: 'Georgia', 'Times New Roman', Times, serif;
             user-select: none;
             -webkit-touch-callout: none;
-            /* FIX: Disable browser gestures for instant touch response */
             touch-action: none;
         }
 
@@ -406,7 +404,6 @@
             <!-- Start Screen -->
             <div id="screen-start" class="screen">
                 <h1 id="txt-title">DARK KNIGHT:<br>ETERNAL PATH</h1>
-                <!-- Removed Tutorial Text -->
                 <button class="btn" id="btnPlay">BEGIN JOURNEY</button>
                 <button class="btn btn-menu" id="btnMenuSettings">SETTINGS</button>
             </div>
@@ -415,9 +412,7 @@
             <div id="screen-settings" class="screen">
                 <div class="menu-container">
                     <h2 id="txt-settings-title">PAUSED</h2>
-                    <!-- Contextual Back/Resume Button -->
                     <button class="btn" id="btnResume">RESUME</button>
-                    <!-- Language Toggle -->
                     <button class="btn btn-secondary" id="btnLangToggle">LANG: EN</button>
                     <button class="btn btn-secondary" id="btnSoundToggle">SOUND: ON</button>
                     <button class="btn btn-secondary" id="btnExit">EXIT</button>
@@ -478,7 +473,7 @@ const TRANSLATIONS = {
     },
     ru: {
         loading: "ПРИЗЫВ...",
-        title: "DARK KNIGHT:\nВЕЧНЫЙ ПУТЬ",
+        title: "ТЕМНЫЙ РЫЦАРЬ:\nВЕЧНЫЙ ПУТЬ",
         play: "НАЧАТЬ ПУТЬ",
         gameover: "ВЫ ПОГИБЛИ",
         paused: "ПАУЗА",
@@ -537,11 +532,36 @@ class SoundManager {
 
     playCrash() {
         if (this.muted) return;
-        this._playTone(40, 'sawtooth', 0.4, -5); 
-        this._playTone(30, 'square', 0.6, -5);
+        this._playTone(120, 'triangle', 0.6, -5, true, 0.01); 
+        setTimeout(() => {
+             this._playTone(60, 'sine', 0.8, -3, true, 0.01);
+        }, 50);
     }
 
-    _playTone(freq, type, duration, volDecibels, slide = false) {
+    playStep() {
+        if (this.muted) return;
+        this._playTone(80, 'triangle', 0.05, -20);
+    }
+
+    playScore() {
+        if (this.muted) return;
+        this._playTone(600, 'sine', 0.1, -15);
+        setTimeout(() => this._playTone(800, 'sine', 0.2, -15), 100);
+    }
+
+    playClick() {
+        if (this.muted) return;
+        this._playTone(400, 'triangle', 0.05, -12);
+    }
+
+    // New Sound for Speed Burst
+    playWhoosh() {
+        if (this.muted) return;
+        // White noise-ish effect via low tri
+        this._playTone(150, 'sawtooth', 0.2, -18, true);
+    }
+
+    _playTone(freq, type, duration, volDecibels, slide = false, rampEnd = 0.001) {
         if (this.ctx.state === 'suspended') this.ctx.resume();
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
@@ -549,7 +569,11 @@ class SoundManager {
         osc.type = type;
         osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
         if (slide) {
-            osc.frequency.exponentialRampToValueAtTime(freq * 3, this.ctx.currentTime + duration);
+            if (rampEnd < 1) {
+                 osc.frequency.exponentialRampToValueAtTime(Math.max(10, freq * 0.2), this.ctx.currentTime + duration);
+            } else {
+                 osc.frequency.exponentialRampToValueAtTime(freq * 3, this.ctx.currentTime + duration);
+            }
         }
         
         const vol = Math.pow(10, volDecibels / 20);
@@ -576,8 +600,6 @@ class YandexManager {
         this.isMock = false;
         
         this.lang = localStorage.getItem('grim-path-lang') || 'en';
-        // We defer applying translations until init to ensure DOM is ready, 
-        // but we can try immediately if elements exist.
     }
 
     setLanguage(lang) {
@@ -632,7 +654,6 @@ class YandexManager {
         this.applyTranslations();
     }
 
-    // GAMEPLAY API: Explicit Start/Stop signals
     gameplayStart() {
         if (this.ysdk && this.ysdk.features.GameplayAPI) {
             this.ysdk.features.GameplayAPI.start();
@@ -665,8 +686,6 @@ class YandexManager {
         document.getElementById('lbl-best').innerText = t.best;
         document.getElementById('lbl-best-over').innerText = t.best;
         
-        // Settings labels are context dependent, updated in Game class
-        // But defaults:
         document.getElementById('btnExit').innerText = t.exit;
         document.getElementById('btnLangToggle').innerText = t.langLabel;
         document.getElementById('txt-rotate').innerText = t.rotate;
@@ -677,12 +696,10 @@ class YandexManager {
     updateSoundBtnText() {
         const t = TRANSLATIONS[this.lang];
         const btn = document.getElementById('btnSoundToggle');
-        // use SoundManager state here
         btn.innerText = this.game.sound.muted ? t.soundOff : t.soundOn;
     }
 
     showInterstitial(cb) {
-        // FIX: Explicitly stop gameplay for analytics
         this.gameplayStop();
 
         if (this.isMock) {
@@ -704,7 +721,6 @@ class YandexManager {
     }
 
     showRewarded(cb) {
-        // FIX: Explicitly stop gameplay for analytics
         this.gameplayStop();
 
         if (this.isMock) {
@@ -717,7 +733,6 @@ class YandexManager {
         this.ysdk.adv.showRewardedVideo({
             callbacks: {
                 onOpen: () => {
-                    // Mute temporally without saving to storage
                     if (this.game.sound.ctx.state === 'running') {
                         this.game.sound.masterGain.gain.setValueAtTime(0, this.game.sound.ctx.currentTime);
                     }
@@ -726,10 +741,7 @@ class YandexManager {
                     hasReward = true;
                 },
                 onClose: () => {
-                    // Restore sound
                     this.game.sound.updateGain();
-                    
-                    // Logic: Callback typically restarts/continues game -> triggers gameplayStart
                     if (hasReward && cb) {
                         cb();
                     }
@@ -809,7 +821,7 @@ class ParallaxLayer {
 
 /**
  * ==========================================
- * 5. GAME ENGINE & STATE MACHINE (with DeltaTime)
+ * 5. GAME ENGINE & STATE MACHINE
  * ==========================================
  */
 class Game {
@@ -819,7 +831,7 @@ class Game {
         
         // STATES: LOADING, MENU, PLAYING, PAUSED, GAMEOVER
         this.state = 'LOADING'; 
-        this.menuContext = false; // Is settings opened from menu?
+        this.menuContext = false; 
         
         this.width = 0;
         this.height = 0;
@@ -838,7 +850,7 @@ class Game {
         this.bestScore = parseInt(localStorage.getItem('grim-path-best')) || 0;
         document.getElementById('bestVal').innerText = this.bestScore;
         
-        // Entities - Standard Speed
+        // Entities
         this.player = {
             x: 100, y: 0, width: 40, height: 60, 
             dy: 0, jumpForce: 15, grounded: false, 
@@ -849,9 +861,15 @@ class Game {
         this.particles = [];
         this.parallaxLayers = [];
         this.score = 0;
-        this.speed = 5.5; 
+
+        // NEW PHYSICS: Separate Base Speed and Current Speed
+        this.baseSpeed = 5.5; 
+        this.currentSpeed = 5.5;
+        this.speedMultiplier = 1.0; // For bursts
+
         this.gravity = 0.65; 
         this.spawnTimer = 0; 
+        this.stepTimer = 0; 
 
         // Bindings
         this.loop = this.loop.bind(this);
@@ -871,24 +889,18 @@ class Game {
             if (e.code === 'Escape') this.togglePause();
         });
         
-        // Instant tap logic
         const inputHandler = (e) => {
-            // Ignore UI buttons
-            if (e.target.closest('.btn') || e.target.closest('.btn-icon')) return;
-            
-            // Prevent default zooming/scrolling
+            if (e.target.closest('.btn') || e.target.closest('.btn-icon')) {
+                if (e.type === 'pointerdown') this.sound.playClick();
+                return;
+            }
             if (e.cancelable && e.type === 'touchstart') e.preventDefault();
-            
             this.handleInput();
         };
 
-        // Use pointerdown for fastest response on both Mobile & PC
         document.addEventListener('pointerdown', inputHandler, { passive: false });
 
-        // UI Setup
         this.setupUI();
-
-        // Init
         this.init();
     }
 
@@ -903,8 +915,8 @@ class Game {
 
         // Main Menu Settings
         document.getElementById('btnMenuSettings').onclick = () => {
-            this.menuContext = true; // Opened from menu
-            this.setState('PAUSED'); // Re-use paused screen
+            this.menuContext = true; 
+            this.setState('PAUSED');
         };
 
         // Game Over Buttons
@@ -922,7 +934,7 @@ class Game {
         const btnSettings = document.getElementById('btnSettings');
         btnSettings.addEventListener('click', (e) => {
             e.stopPropagation(); 
-            this.menuContext = false; // Opened from game
+            this.menuContext = false; 
             this.togglePause();
         });
         btnSettings.addEventListener('touchstart', (e) => {
@@ -934,19 +946,15 @@ class Game {
 
         // Settings Screen Buttons
         document.getElementById('btnResume').onclick = () => {
-            // Contextual behavior
             if (this.menuContext) {
-                // Back to menu
                 this.setState('MENU');
             } else {
-                // Resume game
                 this.togglePause();
             }
         };
         
         document.getElementById('btnLangToggle').onclick = () => {
             this.yandex.toggleLanguage();
-            // Re-update labels immediately to reflect change in Settings UI
             this.updateSettingsLabels(); 
         };
 
@@ -985,7 +993,7 @@ class Game {
         if (this.menuContext) {
             title.innerText = t.settings;
             resumeBtn.innerText = t.back;
-            exitBtn.style.display = 'none'; // No "Exit to Menu" if already in menu
+            exitBtn.style.display = 'none';
         } else {
             title.innerText = t.paused;
             resumeBtn.innerText = t.resume;
@@ -998,9 +1006,9 @@ class Game {
         const elem = document.documentElement;
         if (elem.requestFullscreen) {
             elem.requestFullscreen().catch(err => console.log(err));
-        } else if (elem.webkitRequestFullscreen) { /* Safari */
+        } else if (elem.webkitRequestFullscreen) {
             elem.webkitRequestFullscreen();
-        } else if (elem.msRequestFullscreen) { /* IE11 */
+        } else if (elem.msRequestFullscreen) {
             elem.msRequestFullscreen();
         }
     }
@@ -1018,7 +1026,6 @@ class Game {
         this.state = newState;
         document.querySelectorAll('.screen').forEach(el => el.classList.remove('active'));
 
-        // Handle GameplayAPI logic
         if (newState === 'PLAYING') {
             this.yandex.gameplayStart();
         } else if (prevState === 'PLAYING' && newState !== 'PLAYING') {
@@ -1071,8 +1078,6 @@ class Game {
     }
 
     restartGame() {
-        this.score = 0;
-        this.speed = 5.5;
         this.resetEntities();
         this.setState('PLAYING');
     }
@@ -1093,10 +1098,13 @@ class Game {
         this.player.y = this.groundY - this.player.height;
         this.player.dy = 0;
         this.score = 0;
-        this.speed = 5.5;
+        this.baseSpeed = 5.5;
+        this.currentSpeed = 5.5;
+        this.speedMultiplier = 1.0;
         this.gravity = 0.65;
         this.player.x = 100; 
         this.spawnTimer = 0;
+        this.stepTimer = 0;
         document.getElementById('btnRevive').style.display = 'inline-block';
     }
 
@@ -1125,7 +1133,6 @@ class Game {
     handleInput() {
         if (this.state !== 'PLAYING') return;
 
-        // FIX: Jump only if grounded. Physics fix ensures this is stable now.
         if (this.player.grounded) {
             this.player.dy = -this.player.jumpForce;
             this.player.grounded = false;
@@ -1148,12 +1155,22 @@ class Game {
         }
     }
 
+    // Helper: Linear Interpolation for Smooth Speed
+    lerp(start, end, amt) {
+        return (1 - amt) * start + amt * end;
+    }
+
     update(dt) {
         if (this.state === 'PAUSED') return;
 
+        // Calculate current speed with burst multiplier
+        // Speed Multiplier slowly decays back to 1.0
+        this.speedMultiplier = this.lerp(this.speedMultiplier, 1.0, 0.05 * dt);
+        this.currentSpeed = this.baseSpeed * this.speedMultiplier;
+
         if (this.state === 'PLAYING' || this.state === 'MENU') {
-            const currentSpeed = (this.state === 'MENU') ? 2 : this.speed;
-            this.parallaxLayers.forEach(layer => layer.update(currentSpeed, dt));
+            const scrollSpeed = (this.state === 'MENU') ? 2 : this.currentSpeed;
+            this.parallaxLayers.forEach(layer => layer.update(scrollSpeed, dt));
         }
 
         if (this.state !== 'PLAYING') return;
@@ -1163,13 +1180,19 @@ class Game {
         this.player.y += this.player.dy * dt;
 
         // Ground Collision
-        // FIX: Added tolerance (this.groundY - 2) to fix "flickering grounded state"
-        // on high refresh rate monitors (120Hz/144Hz/250Hz).
-        // This ensures the jump button works 100% of the time.
         if (this.player.y + this.player.height > this.groundY - 2) {
             this.player.y = this.groundY - this.player.height;
             this.player.dy = 0;
             this.player.grounded = true;
+            
+            // Footsteps Logic
+            this.stepTimer += dt;
+            const stepInterval = Math.max(10, 30 - this.currentSpeed * 1.5); 
+            if (this.stepTimer > stepInterval) {
+                this.sound.playStep();
+                this.stepTimer = 0;
+            }
+
             if (Math.random() < 0.2 * dt) {
                  this.createParticles(this.player.x + 10, this.player.y + this.player.height, 1, '#443333', 'dust');
             }
@@ -1178,39 +1201,43 @@ class Game {
         }
 
         // Animation
-        this.player.capeFrame += (0.1 + (this.speed * 0.01)) * dt;
+        this.player.capeFrame += (0.1 + (this.currentSpeed * 0.01)) * dt;
         if (this.player.grounded) {
-            this.player.runFrame += (0.2 + (this.speed * 0.01)) * dt;
+            this.player.runFrame += (0.2 + (this.currentSpeed * 0.01)) * dt;
         } else {
             this.player.runFrame = 0;
         }
 
-        // REBALANCE: Acceleration increased slightly (was 0.00025)
-        const maxSpeed = 9.5;
-        this.speed = Math.min(this.speed + 0.0004 * dt, maxSpeed);
+        // PROGRESSION: Base speed increases slowly
+        const maxBaseSpeed = 9.0;
+        this.baseSpeed = Math.min(this.baseSpeed + 0.0004 * dt, maxBaseSpeed);
         
+        // Score sound logic
+        const oldScore = Math.floor(this.score);
         this.score += 0.1 * dt;
-        document.getElementById('scoreVal').innerText = Math.floor(this.score);
+        const newScore = Math.floor(this.score);
+        
+        document.getElementById('scoreVal').innerText = newScore;
+        
+        if (newScore > 0 && newScore % 100 === 0 && newScore !== oldScore) {
+            this.sound.playScore();
+        }
 
         if (this.shakeIntensity > 0) this.shakeIntensity *= Math.pow(0.9, dt);
         if (this.shakeIntensity < 0.5) this.shakeIntensity = 0;
 
-        // Obstacles Logic (fair timing)
+        // ============================================
+        // OBSTACLES SPAWNING & LOGIC
+        // ============================================
         this.spawnTimer += dt;
-        const difficulty = Math.min(this.score / 250, 1); // 0..1
+        const difficulty = Math.min(this.score / 250, 1); 
 
-        // Frames between spawns (approx 60fps basis)
-        // 78 frames ~ 1.3s, 50 frames ~ 0.8s
         const gapFramesBase = 78 - 28 * difficulty;
-        const gapFrames = gapFramesBase + (Math.random() * 20 - 5); // Added variance
+        const gapFrames = gapFramesBase + (Math.random() * 20 - 5);
 
-        // Min reaction time in frames
-        const minReactFrames = 35; // ~0.6s
-
-        // Air time for jump (approx calculation based on physics)
-        // jumpForce 15, gravity 0.65 -> t_up = 15/0.65 ~ 23 frames. Total air ~ 46 frames.
+        const minReactFrames = 35; 
         const airFrames = (2 * this.player.jumpForce) / this.gravity;
-        const minMustJumpGap = airFrames + 10; // buffer
+        const minMustJumpGap = airFrames + 10;
 
         let canSpawn = false;
 
@@ -1218,13 +1245,9 @@ class Game {
             canSpawn = this.spawnTimer >= gapFrames;
         } else {
             const last = this.obstacles[this.obstacles.length - 1];
-            // Check what kind of gap we need based on previous obstacle
             const neededFrames = (last.mustJump) ? minMustJumpGap : minReactFrames;
+            const minDistance = this.currentSpeed * neededFrames;
 
-            // Convert time to distance
-            const minDistance = this.speed * neededFrames;
-
-            // Only spawn if physically far enough AND timer allows
             if ((this.width - last.x) >= minDistance && this.spawnTimer >= gapFrames) {
                 canSpawn = true;
             }
@@ -1232,12 +1255,40 @@ class Game {
 
         if (canSpawn) this.trySpawnObstacle();
 
-        // Update Obstacles
+        // Update Obstacles Loop
         for (let i = this.obstacles.length - 1; i >= 0; i--) {
             let obs = this.obstacles[i];
-            obs.x -= this.speed * dt;
+            
+            // 1. Move Horizontal
+            obs.x -= this.currentSpeed * dt;
             obs.pulse += 0.1 * dt;
 
+            // 2. NEW: Homing Ghost Logic (Stalker)
+            // If it's a stalker, it flies towards player's Y level
+            if (obs.subtype === 'stalker') {
+                const dist = obs.x - this.player.x;
+                // Only stalk if far enough away (gives chance to dodge at last second)
+                if (dist > 150) {
+                    const targetY = this.player.y + (this.player.height/2) - (obs.height/2);
+                    const dy = (targetY - obs.y) * 0.05 * dt; // Smooth tracking
+                    obs.y += dy;
+                }
+            }
+
+            // 3. NEW: Speed Burst Logic
+            // If obstacle has 'canBurst' flag and hasn't triggered yet
+            // Trigger when close enough (e.g., 250px)
+            if (obs.canBurst && !obs.burstTriggered) {
+                const dist = obs.x - this.player.x;
+                if (dist < 250 && dist > 100) {
+                    obs.burstTriggered = true;
+                    this.speedMultiplier = 1.6; // SURPRISE BURST!
+                    this.sound.playWhoosh();
+                    this.shakeIntensity = 5; // Slight shake for impact
+                }
+            }
+
+            // Collision
             let hitX = obs.x + 10;
             let hitW = obs.width - 20;
             let hitY = obs.y + 10;
@@ -1274,29 +1325,41 @@ class Game {
         const r = Math.random();
         let type = 'tombstone';
         let mustJump = true;
-        let size = 50; // default for tombstone
+        let size = 50; 
         let obsY = this.groundY - size + 5;
+        let canBurst = false;
 
-        // Variety after some score
+        // Determine Type
         if (this.score > 50) {
-            if (r < 0.35) type = 'ghostHigh';
-            else if (r < 0.65) type = 'ghostLow';
+            if (r < 0.20) type = 'ghostHigh';
+            else if (r < 0.40) type = 'ghostLow';
+            else if (r < 0.55) type = 'stalker'; // NEW: Homing ghost
         }
 
+        // Configure Type
         if (type === 'tombstone') {
             size = 50;
             obsY = this.groundY - size + 5;
             mustJump = true;
         } else if (type === 'ghostLow') {
             size = 40;
-            // Low enough to force jump, high enough to look floating
             obsY = this.groundY - 60 - Math.random() * 20;
             mustJump = true;
         } else if (type === 'ghostHigh') {
             size = 40;
-            // High enough to run under
             obsY = this.groundY - 130 - Math.random() * 40;
             mustJump = false;
+        } else if (type === 'stalker') {
+            size = 40;
+            // Starts high or low random
+            obsY = (Math.random() > 0.5) ? (this.groundY - 140) : (this.groundY - 50);
+            mustJump = true; // tricky, player must react
+        }
+
+        // NEW: Probability to be a "Speed Burst" obstacle
+        // Makes the game harder by accelerating right before this object
+        if (this.score > 100 && Math.random() < 0.4) {
+            canBurst = true;
         }
 
         this.obstacles.push({
@@ -1304,10 +1367,12 @@ class Game {
             y: obsY,
             width: size,
             height: size,
-            type: type.includes('ghost') ? 'ghost' : 'tombstone', // render type
+            type: (type.includes('ghost') || type === 'stalker') ? 'ghost' : 'tombstone', // visual type
             subtype: type, // logic type
             pulse: 0,
-            mustJump: mustJump
+            mustJump: mustJump,
+            canBurst: canBurst,       // Logic flag
+            burstTriggered: false     // State flag
         });
     }
 
@@ -1420,8 +1485,15 @@ class Game {
 
         if (obs.type === 'ghost') {
             this.ctx.shadowBlur = 10;
-            this.ctx.shadowColor = '#8a2be2';
-            this.ctx.fillStyle = `rgba(200, 200, 255, ${0.7 + Math.sin(obs.pulse)*0.2})`;
+            
+            // Visual diff for Stalkers (Reddish) vs Normal (Purplish)
+            if (obs.subtype === 'stalker') {
+                this.ctx.shadowColor = '#ff3333';
+                this.ctx.fillStyle = `rgba(255, 200, 200, ${0.7 + Math.sin(obs.pulse)*0.2})`;
+            } else {
+                this.ctx.shadowColor = '#8a2be2';
+                this.ctx.fillStyle = `rgba(200, 200, 255, ${0.7 + Math.sin(obs.pulse)*0.2})`;
+            }
             
             this.ctx.beginPath();
             this.ctx.arc(20, 20, 15, Math.PI, 0);
@@ -1456,8 +1528,15 @@ class Game {
             this.ctx.lineTo(20, 35);
             this.ctx.stroke();
 
-            this.ctx.shadowBlur = 10;
-            this.ctx.shadowColor = '#b30000';
+            // Highlight burst traps visually? subtle red glow
+            if (obs.canBurst) {
+                 this.ctx.shadowBlur = 5;
+                 this.ctx.shadowColor = '#ff0000';
+            } else {
+                 this.ctx.shadowBlur = 10;
+                 this.ctx.shadowColor = '#b30000';
+            }
+            
             this.ctx.fillStyle = '#b30000';
             this.ctx.fillRect(5, obs.height-5, obs.width-10, 5);
         }

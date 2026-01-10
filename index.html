@@ -814,8 +814,9 @@ class ParallaxLayer {
     }
 
     draw(mainCtx) {
-        mainCtx.drawImage(this.canvas, this.x, 0);
-        mainCtx.drawImage(this.canvas, this.x + this.width, 0);
+        // OPTIMIZATION: Use bitwise OR for integer coords to prevent sub-pixel blurring/tearing
+        mainCtx.drawImage(this.canvas, (this.x | 0), 0);
+        mainCtx.drawImage(this.canvas, (this.x + this.width | 0), 0);
     }
 }
 
@@ -870,6 +871,14 @@ class Game {
         this.gravity = 0.65; 
         this.spawnTimer = 0; 
         this.stepTimer = 0; 
+
+        // New Logic: Cooldown based bursts
+        this.burstCount = 0;
+        this.burstCooldownEnd = 0;
+        
+        // Caching Gradients
+        this.bgGradient = null;
+        this.vignetteGradient = null;
 
         // Bindings
         this.loop = this.loop.bind(this);
@@ -1105,6 +1114,11 @@ class Game {
         this.player.x = 100; 
         this.spawnTimer = 0;
         this.stepTimer = 0;
+        
+        // Reset Cooldown logic
+        this.burstCount = 0;
+        this.burstCooldownEnd = 0;
+
         document.getElementById('btnRevive').style.display = 'inline-block';
     }
 
@@ -1124,6 +1138,18 @@ class Game {
         this.groundY = this.height - 80;
         
         this.initParallax();
+
+        // OPTIMIZATION: Cache gradients on resize instead of every frame
+        this.bgGradient = this.ctx.createLinearGradient(0, 0, 0, this.height);
+        this.bgGradient.addColorStop(0, '#050010');
+        this.bgGradient.addColorStop(1, '#240b36');
+
+        this.vignetteGradient = this.ctx.createRadialGradient(
+            this.width/2, this.height/2, this.height/3, 
+            this.width/2, this.height/2, this.height
+        );
+        this.vignetteGradient.addColorStop(0, 'transparent');
+        this.vignetteGradient.addColorStop(1, 'rgba(0,0,0,0.7)');
 
         if (this.state === 'MENU' || this.state === 'LOADING') {
              this.player.y = this.groundY - this.player.height;
@@ -1287,6 +1313,13 @@ class Game {
                     this.speedMultiplier = 1.35; // Was 1.6 - reduced for better playability
                     this.sound.playWhoosh();
                     this.shakeIntensity = 5; // Slight shake for impact
+                    
+                    // Logic: Count bursts, trigger cooldown if limit reached
+                    this.burstCount++;
+                    if (this.burstCount >= 2) {
+                        this.burstCooldownEnd = this.score + 100;
+                        this.burstCount = 0;
+                    }
                 }
             }
 
@@ -1360,7 +1393,8 @@ class Game {
 
         // NEW: Probability to be a "Speed Burst" obstacle
         // Makes the game harder by accelerating right before this object
-        if (this.score > 100 && Math.random() < 0.4) {
+        // LIMIT: Only if cooldown period is over
+        if (this.score > 100 && Math.random() < 0.4 && this.score >= this.burstCooldownEnd) {
             canBurst = true;
         }
 
@@ -1387,11 +1421,15 @@ class Game {
             this.ctx.translate(dx, dy);
         }
 
-        const grad = this.ctx.createLinearGradient(0, 0, 0, this.height);
-        grad.addColorStop(0, '#050010');
-        grad.addColorStop(1, '#240b36');
-        this.ctx.fillStyle = grad;
-        this.ctx.fillRect(0, 0, this.width, this.height);
+        // OPTIMIZATION: Use Cached Gradient
+        if (this.bgGradient) {
+            this.ctx.fillStyle = this.bgGradient;
+            this.ctx.fillRect(0, 0, this.width, this.height);
+        } else {
+            // Fallback just in case
+            this.ctx.fillStyle = '#1a0b2e';
+            this.ctx.fillRect(0, 0, this.width, this.height);
+        }
 
         this.ctx.shadowBlur = 40;
         this.ctx.shadowColor = '#fff';
@@ -1428,21 +1466,18 @@ class Game {
         this.ctx.globalAlpha = 1;
         this.ctx.shadowBlur = 0;
 
-        const gradient = this.ctx.createRadialGradient(
-            this.width/2, this.height/2, this.height/3, 
-            this.width/2, this.height/2, this.height
-        );
-        gradient.addColorStop(0, 'transparent');
-        gradient.addColorStop(1, 'rgba(0,0,0,0.7)');
-        this.ctx.fillStyle = gradient;
-        this.ctx.fillRect(0,0,this.width, this.height);
+        // OPTIMIZATION: Use Cached Vignette Gradient
+        if (this.vignetteGradient) {
+            this.ctx.fillStyle = this.vignetteGradient;
+            this.ctx.fillRect(0, 0, this.width, this.height);
+        }
 
         this.ctx.restore();
     }
 
     drawKnight(x, y, w, h) {
         this.ctx.save();
-        this.ctx.translate(x, y);
+        this.ctx.translate(x | 0, y | 0); // Optimization: Int coords
 
         this.ctx.fillStyle = '#2a0a0a';
         this.ctx.beginPath();
@@ -1483,7 +1518,7 @@ class Game {
 
     drawObstacle(obs) {
         this.ctx.save();
-        this.ctx.translate(obs.x, obs.y);
+        this.ctx.translate(obs.x | 0, obs.y | 0); // Optimization: Int coords
 
         if (obs.type === 'ghost') {
             this.ctx.shadowBlur = 10;

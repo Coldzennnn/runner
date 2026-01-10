@@ -1280,9 +1280,11 @@ class Game {
             // Trigger when close enough (e.g., 250px)
             if (obs.canBurst && !obs.burstTriggered) {
                 const dist = obs.x - this.player.x;
-                if (dist < 250 && dist > 100) {
+                // FIX: Increased detection range slightly (300) and reduced burst intensity (1.35)
+                // This makes it less punishing on mobile touch screens
+                if (dist < 300 && dist > 100) {
                     obs.burstTriggered = true;
-                    this.speedMultiplier = 1.6; // SURPRISE BURST!
+                    this.speedMultiplier = 1.35; // Was 1.6 - reduced for better playability
                     this.sound.playWhoosh();
                     this.shakeIntensity = 5; // Slight shake for impact
                 }

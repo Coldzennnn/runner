@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Темный Рыцарь: Вечный Путь</title>
     
-    <!-- Yandex Games SDK -->
-    <script src="https://yandex.ru/games/sdk/v2"></script>
+    <!-- Yandex Games SDK (Updated for ZIP archive requirement) -->
+    <script src="/sdk.js"></script>
     
     <!-- 
         LICENSE & COPYRIGHT INFO:
@@ -379,7 +379,8 @@
         }
     </style>
 </head>
-<body>
+<!-- Added oncontextmenu and ondragstart to body as requested -->
+<body oncontextmenu="return false;" ondragstart="return false;">
 
     <div id="bg-wrapper"></div>
 
@@ -396,9 +397,8 @@
         </div>
 
         <div id="ui-layer">
-            <!-- Loading -->
+            <!-- Loading - Removed Text as requested -->
             <div id="screen-loading" class="screen active loading-overlay">
-                <h1 id="txt-loading" style="font-size: 24px; color: #666;">SUMMONING...</h1>
             </div>
 
             <!-- Start Screen -->
@@ -594,12 +594,15 @@ class SoundManager {
  * ==========================================
  */
 class YandexManager {
-    constructor(gameInstance) {
-        this.ysdk = null;
+    constructor(gameInstance, ysdk, initialLang) {
         this.game = gameInstance;
-        this.isMock = false;
+        this.ysdk = ysdk;
+        this.isMock = !ysdk;
         
-        this.lang = localStorage.getItem('grim-path-lang') || 'en';
+        // Use the passed language or fallback to saved/en
+        this.lang = localStorage.getItem('grim-path-lang') || initialLang || 'en';
+        
+        this.applyTranslations();
     }
 
     setLanguage(lang) {
@@ -613,46 +616,7 @@ class YandexManager {
         this.setLanguage(newLang);
     }
 
-    async init() {
-        const timeoutPromise = new Promise((resolve, reject) => {
-            setTimeout(() => reject(new Error("SDK Timeout")), 1500);
-        });
-
-        const sdkPromise = new Promise(async (resolve, reject) => {
-             if (window.YaGames) {
-                 try {
-                    const ysdk = await window.YaGames.init();
-                    resolve(ysdk);
-                 } catch (e) {
-                     reject(e);
-                 }
-             } else {
-                 reject(new Error("No SDK Script"));
-             }
-        });
-
-        try {
-            this.ysdk = await Promise.race([sdkPromise, timeoutPromise]);
-            
-            if (!localStorage.getItem('grim-path-lang')) {
-                const env = this.ysdk.environment;
-                const code = env.i18n.lang;
-                if (['ru', 'be', 'kk', 'uk', 'uz'].includes(code)) this.lang = 'ru';
-                else this.lang = 'en';
-            }
-
-            this.ysdk.features.LoadingAPI.ready();
-            
-        } catch (e) {
-            console.warn("Falling back to Offline/Mock Mode:", e);
-            this.isMock = true;
-            if (!localStorage.getItem('grim-path-lang')) {
-                 if ((navigator.language || "").startsWith('ru')) this.lang = 'ru';
-            }
-        }
-        
-        this.applyTranslations();
-    }
+    // init() REMOVED per requirements. Logic moved to window.onload
 
     gameplayStart() {
         if (this.ysdk && this.ysdk.features.GameplayAPI) {
@@ -671,6 +635,10 @@ class YandexManager {
         if (!t) return; 
         
         const loadEl = document.getElementById('txt-loading');
+        // If element exists and we have text, we set it. 
+        // NOTE: User removed the h1 tag, so this check avoids errors if ID is missing.
+        // But the ID txt-loading was on the H1 which is now gone. 
+        // We can safely ignore if element is missing.
         if (loadEl) loadEl.innerText = t.loading;
 
         document.getElementById('txt-title').innerText = t.title;
@@ -723,12 +691,18 @@ class YandexManager {
     showRewarded(cb) {
         this.gameplayStop();
 
+        // 1. MOCK MODE (Strict: Confirm Dialog)
         if (this.isMock) {
-            if (cb) cb();
+            const confirmed = confirm("Тестовая реклама: Посмотреть видео за награду?");
+            if (confirmed) {
+                if (cb) cb();
+            }
+            // If cancelled, do nothing (stay in Game Over)
             return;
         }
 
-        let hasReward = false;
+        // 2. SDK MODE (Strict: Check onRewarded)
+        let rewardGranted = false;
 
         this.ysdk.adv.showRewardedVideo({
             callbacks: {
@@ -738,17 +712,20 @@ class YandexManager {
                     }
                 },
                 onRewarded: () => {
-                    hasReward = true;
+                    rewardGranted = true;
                 },
                 onClose: () => {
                     this.game.sound.updateGain();
-                    if (hasReward && cb) {
+                    if (rewardGranted && cb) {
                         cb();
                     }
+                    // If not rewarded, do nothing (stay in Game Over)
                 },
                 onError: (e) => {
                     console.error("Rewarded Error:", e);
                     this.game.sound.updateGain();
+                    // Alert user on error
+                    alert("Не удалось загрузить рекламу. Попробуйте позже.");
                 }
             }
         });
@@ -826,7 +803,7 @@ class ParallaxLayer {
  * ==========================================
  */
 class Game {
-    constructor() {
+    constructor(ysdk, initialLang) {
         this.canvas = document.getElementById('gameCanvas');
         this.ctx = this.canvas.getContext('2d');
         
@@ -840,7 +817,8 @@ class Game {
         
         // Systems
         this.sound = new SoundManager();
-        this.yandex = new YandexManager(this);
+        // Pass ysdk and detected language to manager
+        this.yandex = new YandexManager(this, ysdk, initialLang);
         
         // Performance
         this.lastTime = 0;
@@ -1022,9 +1000,9 @@ class Game {
         }
     }
 
-    async init() {
+    // Removed async Yandex init from here
+    init() {
         requestAnimationFrame(this.loop);
-        await this.yandex.init();
         this.initParallax();
         this.setState('MENU');
         document.getElementById('screen-loading').classList.remove('active');
@@ -1597,8 +1575,46 @@ class Game {
     }
 }
 
+// ==========================================
+// INITIALIZATION FLOW (Fixed for Yandex Moderation)
+// ==========================================
 window.onload = () => {
-    const game = new Game();
+    // 1. Prevent Context Menu (Req #2)
+    document.addEventListener('contextmenu', event => event.preventDefault());
+
+    // 2. Initialize SDK First (Req #3)
+    // FIX: Check if YaGames exists before calling init (avoids ReferenceError if sdk.js is missing)
+    if (typeof YaGames !== 'undefined') {
+        YaGames.init()
+            .then(ysdk => {
+                // 3. Define Language
+                let lang = 'en';
+                try {
+                    const code = ysdk.environment.i18n.lang;
+                    if (['ru', 'be', 'kk', 'uk', 'uz'].includes(code)) {
+                        lang = 'ru';
+                    }
+                } catch (e) {
+                    console.warn('Language detection failed', e);
+                }
+
+                // 4. Create Game with SDK and Language passed in
+                // Note: Translations are applied inside Game -> YandexManager constructor
+                const game = new Game(ysdk, lang);
+
+                // 5. Signal Ready ONLY after game is created
+                ysdk.features.LoadingAPI.ready();
+            })
+            .catch(e => {
+                console.error('SDK Init Failed', e);
+                // Fallback for local testing (mock mode)
+                const game = new Game(null, 'en');
+            });
+    } else {
+        // SDK script failed to load or is missing (local dev environment)
+        console.log('YaGames SDK not found. Launching in Offline/Mock Mode.');
+        const game = new Game(null, 'en');
+    }
 };
 </script>
 </body>
